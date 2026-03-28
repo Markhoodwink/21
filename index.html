@@ -1,73 +1,324 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>21: Survival</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>21: SURVIVAL</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { background: #0a0a0a; color: #c00; font-family: monospace; text-align: center; }
-        .btn { background: #300; color: #f00; border: 1px solid red; padding: 10px; cursor: pointer; margin: 5px; }
-        input { background: #111; color: #fff; border: 1px solid #555; padding: 10px; }
+        body {
+            background: #111; color: #eee; font-family: monospace; 
+            margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center;
+        }
+        h1 { color: #d00; text-shadow: 0 0 5px red; margin: 10px 0; }
+        
+        /* Меню */
+        #setup { text-align: center; margin-top: 20vh; }
+        .btn { 
+            background: #222; color: #d00; border: 1px solid #d00; 
+            padding: 12px 20px; margin: 5px; cursor: pointer; font-size: 16px; font-weight: bold;
+        }
+        .btn:hover { background: #400; color: #fff; }
+        .btn:disabled { background: #111; border-color: #333; color: #555; cursor: not-allowed; }
+        input { background: #000; color: #fff; border: 1px solid #555; padding: 12px; font-size: 16px; text-align: center;}
+
+        /* Игровой стол */
+        #game { display: none; width: 100%; max-width: 500px; flex-direction: column; gap: 20px; }
+        
+        .area { 
+            border: 1px solid #333; padding: 15px; border-radius: 5px; 
+            background: #1a1a1a; position: relative;
+        }
+        .opp-area { border-top-color: #d00; }
+        .my-area { border-bottom-color: #0d0; }
+        
+        .health { font-size: 14px; color: #aaa; margin-bottom: 10px; }
+        .health span { color: #f00; font-weight: bold; }
+        
+        .cards { display: flex; gap: 10px; min-height: 80px; align-items: center; justify-content: center; }
+        .card { 
+            width: 50px; height: 75px; background: #ddd; color: #000; 
+            display: flex; justify-content: center; align-items: center; 
+            font-size: 24px; font-weight: bold; border-radius: 4px; box-shadow: 2px 2px 5px #000;
+        }
+        .card.hidden { background: #222; color: #d00; border: 1px solid #d00; }
+        .card.trump { background: #d90; color: #000; width: 80px; height: 30px; font-size: 12px; cursor: pointer;}
+        
+        .trumps-zone { display: flex; gap: 5px; margin-top: 10px; justify-content: center;}
+        
+        /* Центр стола */
+        .center { text-align: center; border-top: 1px dashed #444; border-bottom: 1px dashed #444; padding: 15px 0; }
+        #status-text { font-size: 18px; font-weight: bold; color: #ff0; margin-bottom: 15px; }
     </style>
 </head>
 <body>
-    <h1>DLC: 21 SURVIVAL</h1>
+
+    <h1>21: SURVIVAL</h1>
+
     <div id="setup">
         <button class="btn" onclick="createRoom()">СОЗДАТЬ ИГРУ</button><br><br>
-        <input type="text" id="roomCode" placeholder="КОД ДРУГА">
+        <p>ИЛИ</p>
+        <input type="text" id="roomCode" placeholder="КОД КОМНАТЫ"><br>
         <button class="btn" onclick="joinRoom()">ВОЙТИ</button>
     </div>
-    <div id="game" style="display:none">
-        <p>Комната: <span id="roomNum"></span></p>
-        <div id="status">Ожидание игрока...</div>
-        <button class="btn" onclick="hit()">ВЗЯТЬ КАРТУ</button>
-        <button class="btn" onclick="stay()">ПАС</button>
+
+    <div id="game">
+        
+        <div class="area opp-area">
+            <div class="health">Противник | Заряды: <span id="opp-health">5</span> | Очки: <span id="opp-score">?</span></div>
+            <div class="cards" id="opp-cards"></div>
+            <div class="trumps-zone" id="opp-trumps"></div>
+        </div>
+
+        <div class="center">
+            <div id="status-text">Ожидание...</div>
+            <p style="margin: 0; color: #555; font-size: 12px;">Комната: <span id="room-id-display"></span></p>
+            <div style="margin-top: 15px;">
+                <button class="btn" id="btn-hit" onclick="hit()">ВЗЯТЬ КАРТУ</button>
+                <button class="btn" id="btn-stay" onclick="stay()">ХВАТИТ</button>
+            </div>
+        </div>
+
+        <div class="area my-area">
+            <div class="health">Ты | Заряды: <span id="my-health">5</span> | Очки: <span id="my-score">0</span></div>
+            <div class="cards" id="my-cards"></div>
+            <div class="trumps-zone" id="my-trumps">
+                <div class="card trump" onclick="alert('Козыри добавим на следующем этапе!')">ТРАМП: +2</div>
+            </div>
+        </div>
+
     </div>
 
-    <script>
-        // СЮДА ВСТАВЬ СВОИ ДАННЫЕ ИЗ FIREBASE
-        const firebaseConfig = {
-            apiKey: "AIzaSyBXGHOD4MVcRAwxUtE670bb_ZmuvHU738Y",
-   authDomain: "game-a4006.firebaseapp.com",
+<script>
+    // 1. ВСТАВЬ СВОИ ДАННЫЕ ИЗ FIREBASE СЮДА
+    const firebaseConfig = {
+        apiKey: "AIzaSyBXGHOD4MVcRAwxUtE670bb_ZmuvHU738Y",
+  authDomain: "game-a4006.firebaseapp.com",
   databaseURL: "https://game-a4006-default-rtdb.firebaseio.com",
   projectId: "game-a4006",
   storageBucket: "game-a4006.firebasestorage.app",
   messagingSenderId: "319976807513",
   appId: "1:319976807513:web:750c89eae200a1816be548",
   measurementId: "G-MQZJ3WVSJM"
-        };
+    };
 
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-        let room = null;
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-        function createRoom() {
-            room = Math.floor(1000 + Math.random() * 9000);
-            db.ref('rooms/' + room).set({ status: 'waiting', turn: 'host' });
-            showGame();
+    let roomId = null;
+    let myRole = null; // 'host' или 'guest'
+    let opponentRole = null;
+
+    // Генерация колоды 1-11
+    function generateDeck() {
+        let deck = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        return deck.sort(() => Math.random() - 0.5);
+    }
+
+    function createRoom() {
+        roomId = Math.floor(1000 + Math.random() * 9000).toString();
+        myRole = 'host';
+        opponentRole = 'guest';
+        
+        let initialDeck = generateDeck();
+        
+        // Создаем структуру игры в базе
+        db.ref('rooms/' + roomId).set({
+            status: 'waiting',
+            turn: 'host',
+            deck: initialDeck,
+            host: { hand: [initialDeck.pop()], health: 5, state: 'playing' },
+            guest: { hand: [], health: 5, state: 'waiting' },
+            revealed: false // Вскрыты ли карты
+        });
+
+        initGameUI();
+    }
+
+    function joinRoom() {
+        roomId = document.getElementById('roomCode').value;
+        myRole = 'guest';
+        opponentRole = 'host';
+
+        // Гость присоединяется, берет первую карту и меняет статус игры
+        db.ref('rooms/' + roomId).once('value', snapshot => {
+            let data = snapshot.val();
+            if(data && data.status === 'waiting') {
+                let deck = data.deck || [];
+                let guestCard = deck.pop();
+                
+                db.ref('rooms/' + roomId).update({
+                    status: 'playing',
+                    deck: deck,
+                    'guest/hand': [guestCard],
+                    'guest/state': 'playing'
+                });
+                initGameUI();
+            } else {
+                alert("Комната не найдена или игра уже идет!");
+            }
+        });
+    }
+
+    // Запуск прослушивания изменений в базе (Главный State Machine)
+    function initGameUI() {
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('game').style.display = 'flex';
+        document.getElementById('room-id-display').innerText = roomId;
+
+        db.ref('rooms/' + roomId).on('value', snapshot => {
+            const data = snapshot.val();
+            if(!data) return;
+            renderTable(data);
+        });
+    }
+
+    // Отрисовка стола (вызывается при любом изменении в базе)
+    function renderTable(data) {
+        if(data.status === 'waiting') {
+            document.getElementById('status-text').innerText = "Ждем противника... Твой код: " + roomId;
+            disableButtons(true);
+            return;
         }
 
-        function joinRoom() {
-            room = document.getElementById('roomCode').value;
-            db.ref('rooms/' + room).update({ status: 'playing' });
-            showGame();
-        }
+        const me = data[myRole];
+        const opp = data[opponentRole];
+        const isMyTurn = (data.turn === myRole) && (data.status === 'playing') && (me.state !== 'stay');
 
-        function showGame() {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('game').style.display = 'block';
-            document.getElementById('roomNum').innerText = room;
-            
-            // Слушаем изменения в базе
-            db.ref('rooms/' + room).on('value', (snap) => {
-                const data = snap.val();
-                document.getElementById('status').innerText = "Статус: " + data.status;
+        // Мои данные
+        let mySum = me.hand ? me.hand.reduce((a,b)=>a+b, 0) : 0;
+        document.getElementById('my-score').innerText = mySum;
+        document.getElementById('my-health').innerText = me.health;
+        document.getElementById('my-cards').innerHTML = '';
+        if(me.hand) {
+            me.hand.forEach(card => {
+                document.getElementById('my-cards').innerHTML += `<div class="card">${card}</div>`;
             });
         }
 
-        function hit() { alert('Скоро добавим логику RE7!'); }
-        function stay() { alert('Пас!'); }
-    </script>
+        // Данные противника
+        document.getElementById('opp-health').innerText = opp.health;
+        document.getElementById('opp-cards').innerHTML = '';
+        if(opp.hand) {
+            opp.hand.forEach((card, index) => {
+                // Прячем первую карту противника, если раунд не закончен
+                if(index === 0 && !data.revealed) {
+                    document.getElementById('opp-cards').innerHTML += `<div class="card hidden">?</div>`;
+                } else {
+                    document.getElementById('opp-cards').innerHTML += `<div class="card">${card}</div>`;
+                }
+            });
+        }
+        
+        // Очки противника (скрываем, пока не вскрыты карты)
+        if(data.revealed) {
+            let oppSum = opp.hand ? opp.hand.reduce((a,b)=>a+b, 0) : 0;
+            document.getElementById('opp-score').innerText = oppSum;
+        } else {
+            document.getElementById('opp-score').innerText = "?";
+        }
+
+        // Статус текст и кнопки
+        if(data.status === 'finished') {
+            document.getElementById('status-text').innerText = "РАУНД ОКОНЧЕН!";
+            disableButtons(true);
+            // Хост сбрасывает раунд через 3 секунды
+            if(myRole === 'host') setTimeout(() => resetRound(data), 3000);
+        } else {
+            document.getElementById('status-text').innerText = isMyTurn ? "ТВОЙ ХОД" : "ХОД ПРОТИВНИКА";
+            disableButtons(!isMyTurn);
+        }
+    }
+
+    // Игровая логика
+    function hit() {
+        db.ref('rooms/' + roomId).once('value', snap => {
+            let data = snap.val();
+            let deck = data.deck || [];
+            if(deck.length === 0) return alert("Колода пуста!");
+            
+            let card = deck.pop();
+            let myHand = data[myRole].hand || [];
+            myHand.push(card);
+
+            let updates = {};
+            updates['deck'] = deck;
+            updates[`${myRole}/hand`] = myHand;
+            updates['turn'] = opponentRole; // Передаем ход
+            
+            db.ref('rooms/' + roomId).update(updates);
+            checkEndRound(data, myHand, data[opponentRole].hand);
+        });
+    }
+
+    function stay() {
+        db.ref('rooms/' + roomId).once('value', snap => {
+            let data = snap.val();
+            let updates = {};
+            updates[`${myRole}/state`] = 'stay';
+            
+            if(data[opponentRole].state === 'stay') {
+                // Оба сказали Хватит -> конец раунда
+                updates['status'] = 'finished';
+                updates['revealed'] = true;
+                db.ref('rooms/' + roomId).update(updates).then(() => calculateWinner(data));
+            } else {
+                updates['turn'] = opponentRole;
+                db.ref('rooms/' + roomId).update(updates);
+            }
+        });
+    }
+
+    // Подсчет результатов
+    function calculateWinner(data) {
+        if(myRole !== 'host') return; // Только хост считает урон, чтобы не было двойного списания
+
+        let hostHand = data.host.hand || [];
+        let guestHand = data.guest.hand || [];
+        let hostScore = hostHand.reduce((a,b)=>a+b, 0);
+        let guestScore = guestHand.reduce((a,b)=>a+b, 0);
+
+        let updates = {};
+        
+        // Логика выигрыша
+        if(hostScore > 21 && guestScore <= 21) updates['host/health'] = data.host.health - 1;
+        else if(guestScore > 21 && hostScore <= 21) updates['guest/health'] = data.guest.health - 1;
+        else if(hostScore <= 21 && guestScore <= 21) {
+            if(hostScore < guestScore) updates['host/health'] = data.host.health - 1;
+            if(guestScore < hostScore) updates['guest/health'] = data.guest.health - 1;
+        } else {
+            // Оба перебор - оба получают урон
+            updates['host/health'] = data.host.health - 1;
+            updates['guest/health'] = data.guest.health - 1;
+        }
+
+        db.ref('rooms/' + roomId).update(updates);
+    }
+
+    // Новый раунд
+    function resetRound(data) {
+        let initialDeck = generateDeck();
+        db.ref('rooms/' + roomId).update({
+            status: 'playing',
+            turn: 'host',
+            deck: initialDeck,
+            'host/hand': [initialDeck.pop()],
+            'host/state': 'playing',
+            'guest/hand': [initialDeck.pop()],
+            'guest/state': 'playing',
+            revealed: false
+        });
+    }
+
+    function checkEndRound(data, myHand, oppHand) {
+        // Если кто-то набрал 21, раунд завершается (реализуем позже для красоты)
+    }
+
+    function disableButtons(disable) {
+        document.getElementById('btn-hit').disabled = disable;
+        document.getElementById('btn-stay').disabled = disable;
+    }
+</script>
 </body>
 </html>
